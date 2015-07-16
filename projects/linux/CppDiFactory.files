@@ -1,0 +1,13 @@
+../../include/CppDiFactory.h
+../../examples/example4/classWithDependencies.cpp
+../../examples/example1/helloworld.cpp
+../../examples/example1/helloworld.cpp
+../../examples/example2/singleton.cpp
+../../examples/example3/mapToExistingInstance.cpp
+../../examples/example4/classWithDependencies.cpp
+../../examples/Makefile
+../../Makefile
+../../tests/MainTest.cpp
+../../tests/Makefile
+../../tests/catch.hpp
+../../tests/testCase1.h
