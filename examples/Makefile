@@ -10,6 +10,8 @@ CXXFLAGS  = -g -Wall -std=c++11 -I$(INC)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
+.PHONY: all clean
+
 #################
 ### Example1 ####
 #################
@@ -47,6 +49,7 @@ $(BUILD_DIR)/classWithDependencies.o: example4/classWithDependencies.cpp $(INC)/
 	$(CC) $(CXXFLAGS) -c example4/classWithDependencies.cpp -o $(BUILD_DIR)/classWithDependencies.o
 
 all: $(BUILD_DIR) example1 example2 example3 example4
+
 
 clean:
 	rm -rf $(BUILD_DIR)

@@ -26,6 +26,7 @@ namespace CppDiFactory
     using std::recursive_mutex;
     using std::shared_ptr;
     using std::size_t;
+    using std::static_pointer_cast;
     using std::vector;
     using std::unordered_map;
 
@@ -85,10 +86,9 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto creator = [this](IHolderPtrMap& typeInstanceMap) -> IHolderPtr
+            auto creator = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
             {
-                shared_ptr<T> instance = make_shared<T>(getMyInstance<Dependencies>(typeInstanceMap)...);
-                return shared_ptr<Holder<T>>{new Holder<T>{ instance }};
+                return make_shared<T>(getMyInstance<Dependencies>(typeInstanceMap)...);
             };
 
             _typesToCreators.insert(pair<size_t, CreatorLambda>{type_id<T>(), creator} );
@@ -101,8 +101,8 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            IHolderPtr holder = shared_ptr<Holder<T>>{new Holder<T>{instance}};
-            auto creator = [this, holder](IHolderPtrMap& typeInstanceMap) -> IHolderPtr
+            GenericPtr holder(instance);
+            auto creator = [this, holder](GenericPtrMap& typeInstanceMap) -> GenericPtr
             {
                 return holder;
             };
@@ -117,16 +117,15 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto creator = [this](IHolderPtrMap& typeInstanceMap) -> IHolderPtr
+            auto creator = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
             {
                 auto it = typeInstanceMap.find(type_id<T>());
                 if (it != typeInstanceMap.end()){
                     return it->second;
                 } else {
                     shared_ptr<T> instance = make_shared<T>(getMyInstance<Dependencies>(typeInstanceMap)...);
-                    IHolderPtr holder = shared_ptr<Holder<T>>{new Holder<T>{ instance }};
-                    typeInstanceMap[type_id<T>()] = holder;
-                    return holder;
+                    typeInstanceMap[type_id<T>()] = instance;
+                    return instance;
                 }
             };
 
@@ -150,12 +149,9 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto instanceGetter   = [this](IHolderPtrMap& typeInstanceMap) -> IHolderPtr
+            auto instanceGetter   = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
             {
-                auto instance     = getMyInstance<RegisteredConcreteClass>(typeInstanceMap);
-                IHolderPtr holder = shared_ptr<Holder<Interface>>{new Holder<Interface>{ instance }};
-
-                return holder;
+                return getMyInstance<RegisteredConcreteClass>(typeInstanceMap);
             };
 
             _typesToCreators.insert(pair<size_t, CreatorLambda>{type_id<Interface>(), instanceGetter});
@@ -167,32 +163,28 @@ namespace CppDiFactory
         shared_ptr<T> getInstance()
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
-            IHolderPtrMap typeInstanceMap;
+            GenericPtrMap typeInstanceMap;
             return getMyInstance<T>(typeInstanceMap);
         }
 
     private:
-        struct IHolder
-        {
-            virtual ~IHolder() = default;
-        };
-
-        using IHolderPtr    = shared_ptr<IHolder>;
-        using IHolderPtrMap = unordered_map<size_t, IHolderPtr>;
-        using CreatorLambda = function<IHolderPtr(IHolderPtrMap&)>;
+        using GenericPtr    = shared_ptr<void>;
+        using GenericPtrMap = unordered_map<size_t, GenericPtr>;
+        using CreatorLambda = function<GenericPtr(GenericPtrMap&)>;
 
         template <typename T>
-        shared_ptr<T> getMyInstance(IHolderPtrMap& typeInstanceMap)
+        shared_ptr<T> getMyInstance(GenericPtrMap& typeInstanceMap)
         {
             // Try getting registered singleton or instance.
             auto it =_typesToCreators.find(type_id<T>());
             if (it != _typesToCreators.end())
             {
                 auto& creator = it->second;
-
-                auto iholder = creator(typeInstanceMap);
-                auto holder  = static_cast<Holder<T>*>(iholder.get());
-                return holder->_instance;
+                // Convert a shared_ptr<void> to the needed shared_ptr<T>.
+                // It's possible to use static_pointer_cast since it's
+                // guaranteed that the returned instance is of the correct
+                // type.
+                return static_pointer_cast<T>(creator(typeInstanceMap));
             }
 
             // If you debug, in some debuggers (e.g Apple's lldb in Xcode) it will breakpoint in this assert
@@ -201,14 +193,6 @@ namespace CppDiFactory
 
             return nullptr;
         }
-
-        template <typename T>
-        struct Holder : public IHolder
-        {
-            Holder(shared_ptr<T> instance) : _instance(instance) {}
-
-            shared_ptr<T> _instance;
-        };
 
         // Custom type info method that uses size_t and not string for type name -
         // map lookups should go faster than if we would have used RTTI's typeid<T>().name() which returns a string

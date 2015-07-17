@@ -5,16 +5,18 @@ CC=g++
 CFLAGS=-c -Wall -O0 -g3 -std=c++11
 INC=-Iinclude
 
+.PHONY: exampes tests clean run
+
 run: $(SAMPLE)
 	./$(SAMPLE)
 
 .cpp.o:
 	$(CC) $(CFLAGS) $(INC) $< -o $@
 
-tests:  *
+tests:
 	(cd tests; ${MAKE} all);
 
-examples: *
+examples:
 	(cd examples; ${MAKE} all);
 
 $(BUILD_DIR):
