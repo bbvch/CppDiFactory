@@ -86,12 +86,12 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto creator = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
+            auto instanceGetter = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
             {
                 return make_shared<T>(getMyInstance<Dependencies>(typeInstanceMap)...);
             };
 
-            _typesToCreators.insert(pair<size_t, CreatorLambda>{type_id<T>(), creator} );
+             _typesToCreators[type_id<T>()] = instanceGetter;
             
             return InterfaceForType<T>(*this);
         }
@@ -102,12 +102,12 @@ namespace CppDiFactory
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
             GenericPtr holder(instance);
-            auto creator = [this, holder](GenericPtrMap& typeInstanceMap) -> GenericPtr
+            auto instanceGetter = [this, holder](GenericPtrMap& typeInstanceMap) -> GenericPtr
             {
                 return holder;
             };
 
-            _typesToCreators.insert(pair<size_t, CreatorLambda>{type_id<T>(), creator} );
+            _typesToCreators[type_id<T>()] = instanceGetter;
 
             return InterfaceForType<T>(*this);
         }
@@ -117,7 +117,7 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto creator = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
+            auto instanceGetter = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
             {
                 auto it = typeInstanceMap.find(type_id<T>());
                 if (it != typeInstanceMap.end()){
@@ -129,7 +129,7 @@ namespace CppDiFactory
                 }
             };
 
-            _typesToCreators.insert(pair<size_t, CreatorLambda>{type_id<T>(), creator} );
+             _typesToCreators[type_id<T>()] = instanceGetter;
 
             return InterfaceForType<T>(*this);
         }
@@ -140,35 +140,33 @@ namespace CppDiFactory
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
             weak_ptr<T> holder;
-            auto creator = [this, holder](GenericPtrMap& typeInstanceMap) mutable -> GenericPtr
+            auto instanceGetter = [this, holder](GenericPtrMap& typeInstanceMap) mutable -> GenericPtr
             {
                 shared_ptr<T> instance = holder.lock();
                 if(!instance){
-                    instance =  make_shared<T>(getMyInstance<Dependencies>(typeInstanceMap)...);
+                    instance = make_shared<T>(getMyInstance<Dependencies>(typeInstanceMap)...);
                     holder = instance;
                 }
 
                 return instance;
             };
 
-            _typesToCreators.insert(pair<size_t, CreatorLambda>{type_id<T>(), creator} );
+             _typesToCreators[type_id<T>()] = instanceGetter;
 
             return InterfaceForType<T>(*this);
         }
 
         template <typename RegisteredConcreteClass, typename Interface>
-        InterfaceForType<RegisteredConcreteClass> registerInterface()
+        void registerInterface()
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto instanceGetter   = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
+            auto instanceGetter = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
             {
                 return getMyInstance<RegisteredConcreteClass>(typeInstanceMap);
             };
 
-            _typesToCreators.insert(pair<size_t, CreatorLambda>{type_id<Interface>(), instanceGetter});
-
-            return InterfaceForType<RegisteredConcreteClass>(*this);
+            _typesToCreators[type_id<Interface>()] = instanceGetter;
         }
 
         template <typename T>
