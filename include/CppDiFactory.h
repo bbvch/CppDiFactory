@@ -22,27 +22,23 @@ namespace CppDiFactory
     using std::function;
     using std::lock_guard;
     using std::make_shared;
-    using std::pair;
     using std::recursive_mutex;
     using std::shared_ptr;
     using std::size_t;
     using std::static_pointer_cast;
-    using std::vector;
     using std::weak_ptr;
     using std::unordered_map;
 
     //TODO:
-	// 1.) Überprüfen, wie das Verhalten bei einer doppel Registrierung sich auswirkt.
+    // 1.) Deregistrierung
+    // 2.) Zyklische Abhängigkeit überprüfen und assert werfen
     // 3.) SIPR in Kombination mit Singleton assert werfen
-	// 4.) Zyklische Abhängigkeit überprüfen und assert werfen
-	// 5.) Deregistrierung
-
 
 
     // DiFactory
     // Dependency injection container aka Inversion of Control (IoC) container.
     //
-    // Idea and code based upon:
+    // Idea based upon:
     // http://www.codeproject.com/Articles/567981/AnplusIOCplusContainerplususingplusVariadicplusTem
     // https://github.com/Autodesk/goatnative-inject.git
 
