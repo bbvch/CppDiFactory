@@ -143,7 +143,7 @@ int main(int argc, const char * argv[]) {
     if (car->screw() == car2->screw())
         cout << "wrong: car.screw == car2.screw\n";
 
-    if (car->screw() != car->engine()->screw())
+    if (car2->screw() != car2->engine()->screw())
         cout << "wrong: car.screw != car.engine.screw\n";
 
     return 0;

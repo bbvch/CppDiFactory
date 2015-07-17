@@ -11,3 +11,4 @@
 ../../tests/Makefile
 ../../tests/catch.hpp
 ../../tests/testCase1.h
+../../tests/testCaseSingleton.h

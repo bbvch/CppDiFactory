@@ -28,12 +28,12 @@ namespace CppDiFactory
     using std::size_t;
     using std::static_pointer_cast;
     using std::vector;
+    using std::weak_ptr;
     using std::unordered_map;
 
     //TODO:
 	// 1.) Überprüfen, wie das Verhalten bei einer doppel Registrierung sich auswirkt.
-	// 2.) Singleton registrieren und erst beim request erzeugen -> lambda shared pointer reference, Singleton evtl als weakptr.
-	// 3.) SIPR in Kombination mit Singleton assert werfen
+    // 3.) SIPR in Kombination mit Singleton assert werfen
 	// 4.) Zyklische Abhängigkeit überprüfen und assert werfen
 	// 5.) Deregistrierung
 
@@ -139,9 +139,21 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto instance = make_shared<T>(getInstance<Dependencies>()...);
+            weak_ptr<T> holder;
+            auto creator = [this, holder](GenericPtrMap& typeInstanceMap) mutable -> GenericPtr
+            {
+                shared_ptr<T> instance = holder.lock();
+                if(!instance){
+                    instance =  make_shared<T>(getMyInstance<Dependencies>(typeInstanceMap)...);
+                    holder = instance;
+                }
 
-            return registerInstance<T>(instance);
+                return instance;
+            };
+
+            _typesToCreators.insert(pair<size_t, CreatorLambda>{type_id<T>(), creator} );
+
+            return InterfaceForType<T>(*this);
         }
 
         template <typename RegisteredConcreteClass, typename Interface>
