@@ -19,7 +19,6 @@
 
 namespace CppDiFactory
 {
-    using std::function;
     using std::lock_guard;
     using std::make_shared;
     using std::recursive_mutex;
@@ -41,8 +40,11 @@ namespace CppDiFactory
     // http://www.codeproject.com/Articles/567981/AnplusIOCplusContainerplususingplusVariadicplusTem
     // https://github.com/Autodesk/goatnative-inject.git
 
+
+
     class DiFactory
     {
+
     public:
         template <typename T>
         class InterfaceForType
@@ -76,104 +78,71 @@ namespace CppDiFactory
             DiFactory& _diFactory;
         };
 
-        template <typename T, typename... Dependencies>
-        InterfaceForType<T> registerClass()
+
+        template <typename Class, typename... Dependencies>
+        InterfaceForType<Class> registerClass()
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto instanceGetter = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
-            {
-                return make_shared<T>(getMyInstance<Dependencies>(typeInstanceMap)...);
-            };
-
-             _typesToCreators[type_id<T>()] = instanceGetter;
+             _registeredTypes[type_id<Class>()] = make_shared<ClassRegistration<Class, Dependencies...> >();
             
-            return InterfaceForType<T>(*this);
+            return InterfaceForType<Class>(*this);
         }
 
-        template <typename T>
-        InterfaceForType<T> registerInstance(shared_ptr<T> instance)
+
+        template <typename Class>
+        InterfaceForType<Class> registerInstance(shared_ptr<Class> instance)
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            GenericPtr holder(instance);
-            auto instanceGetter = [this, holder](GenericPtrMap& typeInstanceMap) -> GenericPtr
-            {
-                return holder;
-            };
+            _registeredTypes[type_id<Class>()] = make_shared<InstanceRegistration<Class> >(instance);
 
-            _typesToCreators[type_id<T>()] = instanceGetter;
-
-            return InterfaceForType<T>(*this);
+            return InterfaceForType<Class>(*this);
         }
 
-        template <typename T, typename... Dependencies>
-        InterfaceForType<T> registerInstancePerRequest()
+
+        template <typename Class, typename... Dependencies>
+        InterfaceForType<Class> registerInstancePerRequest()
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto instanceGetter = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
-            {
-                auto it = typeInstanceMap.find(type_id<T>());
-                if (it != typeInstanceMap.end()){
-                    return it->second;
-                } else {
-                    shared_ptr<T> instance = make_shared<T>(getMyInstance<Dependencies>(typeInstanceMap)...);
-                    typeInstanceMap[type_id<T>()] = instance;
-                    return instance;
-                }
-            };
+            _registeredTypes[type_id<Class>()] = make_shared<SingleInstancePerRequestRegistration<Class, Dependencies...> >();
 
-             _typesToCreators[type_id<T>()] = instanceGetter;
-
-            return InterfaceForType<T>(*this);
+            return InterfaceForType<Class>(*this);
         }
 
-        template <typename T, typename... Dependencies>
-        InterfaceForType<T> registerSingleton()
+
+        template <typename Class, typename... Dependencies>
+        InterfaceForType<Class> registerSingleton()
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            weak_ptr<T> holder;
-            auto instanceGetter = [this, holder](GenericPtrMap& typeInstanceMap) mutable -> GenericPtr
-            {
-                shared_ptr<T> instance = holder.lock();
-                if(!instance){
-                    instance = make_shared<T>(getMyInstance<Dependencies>(typeInstanceMap)...);
-                    holder = instance;
-                }
+            _registeredTypes[type_id<Class>()] = make_shared<SingletonRegistration<Class, Dependencies...> >();
 
-                return instance;
-            };
-
-             _typesToCreators[type_id<T>()] = instanceGetter;
-
-            return InterfaceForType<T>(*this);
+            return InterfaceForType<Class>(*this);
         }
 
-        template <typename RegisteredConcreteClass, typename Interface>
+
+        template <typename Class, typename Interface>
         void registerInterface()
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto instanceGetter = [this](GenericPtrMap& typeInstanceMap) -> GenericPtr
-            {
-                return getMyInstance<RegisteredConcreteClass>(typeInstanceMap);
-            };
-
-            _typesToCreators[type_id<Interface>()] = instanceGetter;
+            _registeredTypes[type_id<Interface>()] = make_shared<InterfaceRegistration<Interface, Class> >();
         }
+
 
         template <typename T>
         void unregister()
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            auto it = _typesToCreators.find(type_id<T>());
-            if (it != _typesToCreators.end()){
-                _typesToCreators.erase(it);
+            auto it = _registeredTypes.find(type_id<T>());
+            if (it != _registeredTypes.end()){
+                _registeredTypes.erase(it);
             }
         }
+
 
         template <typename T>
         shared_ptr<T> getInstance()
@@ -184,30 +153,183 @@ namespace CppDiFactory
         }
 
     private:
+        friend class AbstractRegistration;
+
         using GenericPtr    = shared_ptr<void>;
         using GenericPtrMap = unordered_map<size_t, GenericPtr>;
-        using CreatorLambda = function<GenericPtr(GenericPtrMap&)>;
+
+        class AbstractRegistration
+        {
+        public:
+            virtual ~AbstractRegistration(){}
+            virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap) = 0;
+            virtual bool isValid(const DiFactory& diFactory, bool isSingleton) const = 0;
+        protected:
+            template <typename T>
+            shared_ptr<AbstractRegistration> findRegistration(const DiFactory& diFactory) const
+            {
+                return diFactory.findRegistration<T>();
+            }
+        };
+
+        template <typename Interface, typename Class>
+        class InterfaceRegistration: public AbstractRegistration
+        {
+        public:
+            virtual ~InterfaceRegistration(){}
+            virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
+            {
+                shared_ptr<AbstractRegistration> concreteClass = findRegistration<Class>(diFactory);
+                return concreteClass->getInstance(diFactory, typeInstanceMap);
+            }
+
+            virtual bool isValid(const DiFactory& diFactory, bool isSingleton) const
+            {
+                shared_ptr<AbstractRegistration> concreteClass = findRegistration<Class>(diFactory);
+                return concreteClass->isValid(diFactory, isSingleton);
+            }
+        };
+
+        template <typename Class, typename... Dependencies>
+        class ClassRegistration: public AbstractRegistration
+        {
+        public:
+            virtual ~ClassRegistration(){}
+            virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
+            {
+                return make_shared<Class>(getDependencyInstance<Dependencies>(diFactory, typeInstanceMap)...);
+            }
+
+            virtual bool isValid(const DiFactory& diFactory, bool isSingleton) const
+            {
+                return BoolAnd(isDependencyValid<Dependencies>(diFactory, isSingleton)...);
+            }
+
+        private:
+            template <typename T>
+            shared_ptr<T> getDependencyInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
+            {
+                shared_ptr<AbstractRegistration> concreteClass = diFactory.findRegistration<Class>(diFactory);
+                return concreteClass->getInstance(diFactory, typeInstanceMap);
+            }
+
+            template <typename T>
+            bool isDependencyValid(const DiFactory& diFactory, bool isSingleton) const
+            {
+                shared_ptr<AbstractRegistration> concreteClass = diFactory.findRegistration<T>(diFactory);
+                return concreteClass->isValid(diFactory, isSingleton);
+            }
+
+            bool BoolAnd() const
+            {
+                return true;
+            }
+
+            template <typename T>
+            T BoolAnd(T value) const
+            {
+                return value;
+            }
+
+            template <typename T, typename... Args>
+            T BoolAnd(T first, Args... args) const
+            {
+                return first && BoolAnd(args...);
+            }
+       };
+
+        template <typename Class>
+        class InstanceRegistration: public AbstractRegistration
+        {
+        public:
+            InstanceRegistration(shared_ptr<Class> instance): _instance(instance) {}
+            virtual ~InstanceRegistration(){}
+
+            virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
+            {
+                return _instance;
+            }
+
+            virtual bool isValid(const DiFactory& diFactory, bool isSingleton) const
+            {
+                return true;
+            }
+
+        private:
+            shared_ptr<Class> _instance;
+        };
+
+        template <typename Class, typename... Dependencies>
+        class SingletonRegistration: public ClassRegistration<Class, Dependencies...>
+        {
+        public:
+            virtual ~SingletonRegistration(){}
+
+            virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
+            {
+                shared_ptr<Class> instance = _instance.lock();
+                if (!instance){
+                    instance  = static_pointer_cast<Class>(ClassRegistration<Class, Dependencies...>::getInstance(diFactory, typeInstanceMap));
+                    _instance = instance;
+                }
+                return instance;
+            }
+
+            virtual bool isValid(const DiFactory& diFactory, bool) const
+            {
+                return ClassRegistration<Class, Dependencies...>::isValid(diFactory, true);
+            }
+
+        private:
+            weak_ptr<Class> _instance;
+        };
+
+        template <typename Class, typename... Dependencies>
+        class SingleInstancePerRequestRegistration: public ClassRegistration<Class, Dependencies...>
+        {
+        public:
+            virtual ~SingleInstancePerRequestRegistration(){}
+
+            virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
+            {
+                auto it = typeInstanceMap.find(type_id<Class>());
+                if (it != typeInstanceMap.end()){
+                    return it->second;
+                } else {
+                    GenericPtr instance  = ClassRegistration<Class, Dependencies...>::getInstance(diFactory, typeInstanceMap);
+                    typeInstanceMap[type_id<Class>()] = instance;
+                    return instance;
+                }
+            }
+
+            virtual bool isValid(const DiFactory& diFactory, bool isSingleton) const
+            {
+                return (!isSingleton) && ClassRegistration<Class, Dependencies...>::isValid(diFactory, isSingleton);
+            }
+        };
 
         template <typename T>
         shared_ptr<T> getMyInstance(GenericPtrMap& typeInstanceMap)
         {
-            // Try getting registered singleton or instance.
-            auto it =_typesToCreators.find(type_id<T>());
-            if (it != _typesToCreators.end())
-            {
-                auto& creator = it->second;
-                // Convert a shared_ptr<void> to the needed shared_ptr<T>.
-                // It's possible to use static_pointer_cast since it's
-                // guaranteed that the returned instance is of the correct
-                // type.
-                return static_pointer_cast<T>(creator(typeInstanceMap));
+            shared_ptr<AbstractRegistration> registration = findRegistration<T>();
+            if (registration){
+                return static_pointer_cast<T>(registration->getInstance(*this, typeInstanceMap));
+            } else {
+                assert(false && "One of your injected dependencies isn't mapped, please check your mappings.");
+                return shared_ptr<T>();
             }
+        }
 
-            // If you debug, in some debuggers (e.g Apple's lldb in Xcode) it will breakpoint in this assert
-            // and by looking in the stack trace you'll be able to see which class you forgot to map.
-            assert(false && "One of your injected dependencies isn't mapped, please check your mappings.");
-
-            return nullptr;
+        template<typename T>
+        shared_ptr<AbstractRegistration> findRegistration() const
+        {
+            const auto it = _registeredTypes.find(type_id<T>());
+            if (it != _registeredTypes.end()){
+                return it->second;
+            } else {
+                //TODO check for null values when called
+                return shared_ptr<AbstractRegistration>();
+            }
         }
 
         // Custom type info method that uses size_t and not string for type name -
@@ -218,10 +340,10 @@ namespace CppDiFactory
         struct type { static void id() { } };
 
         template<typename T>
-        size_t type_id() { return reinterpret_cast<size_t>(&type<T>::id); }
+        size_t type_id() const { return reinterpret_cast<size_t>(&type<T>::id); }
 
         // Holds the lambda function to create a instance of the registered class
-        unordered_map<size_t, CreatorLambda> _typesToCreators;
+        unordered_map<size_t, shared_ptr<AbstractRegistration> > _registeredTypes;
 
         recursive_mutex _mutex;
 
