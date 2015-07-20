@@ -89,7 +89,7 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-             _registeredTypes[type_id<Class>()] = make_shared<ClassRegistration<Class, Dependencies...> >();
+             addRegistration<Class>(make_shared<ClassRegistration<Class, Dependencies...> >());
             
             return InterfaceForType<Class>(*this);
         }
@@ -100,7 +100,7 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            _registeredTypes[type_id<Class>()] = make_shared<InstanceRegistration<Class> >(instance);
+            addRegistration<Class>(make_shared<InstanceRegistration<Class> >(instance));
 
             return InterfaceForType<Class>(*this);
         }
@@ -111,7 +111,7 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            _registeredTypes[type_id<Class>()] = make_shared<SingleInstancePerRequestRegistration<Class, Dependencies...> >();
+            addRegistration<Class>(make_shared<SingleInstancePerRequestRegistration<Class, Dependencies...> >());
 
             return InterfaceForType<Class>(*this);
         }
@@ -122,7 +122,7 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            _registeredTypes[type_id<Class>()] = make_shared<SingletonRegistration<Class, Dependencies...> >();
+            addRegistration<Class>(make_shared<SingletonRegistration<Class, Dependencies...> >());
 
             return InterfaceForType<Class>(*this);
         }
@@ -133,7 +133,7 @@ namespace CppDiFactory
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            _registeredTypes[type_id<Interface>()] = make_shared<InterfaceRegistration<Interface, Class> >();
+            addRegistration<Interface>(make_shared<InterfaceRegistration<Interface, Class> >());
         }
 
 
@@ -146,6 +146,10 @@ namespace CppDiFactory
             if (it != _registeredTypes.end()){
                 _registeredTypes.erase(it);
             }
+
+            for (auto itr : _registeredTypes){
+                itr.second->invalidate();
+            }
         }
 
 
@@ -153,20 +157,20 @@ namespace CppDiFactory
         shared_ptr<T> getInstance()
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
+            AbstractRegistration& registration = findRegistration<T>();
+            registration.validate(*this);
             GenericPtrMap typeInstanceMap;
-            return getMyInstance<T>(typeInstanceMap);
+            return registration.getTypedInstance<T>(*this, typeInstanceMap);
         }
 
 
-        bool isValid()
+        void validate()
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
 
-            bool result = true;
             for (auto it: _registeredTypes){
-                result = result && it.second->isValid(*this, nullptr, false);
+                it.second->validate(*this);
             }
-            return result;
         }
 
     private:
@@ -180,7 +184,35 @@ namespace CppDiFactory
         public:
             virtual ~AbstractRegistration(){}
             virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap) = 0;
-            virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const = 0;
+            virtual void isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool& hasSiprDependency) const = 0;
+
+            void validate(const DiFactory& diFactory)
+            {
+                if (!_validated){
+                    isValid(diFactory, this, _hasSiprDependency);
+                    _validated = true;
+                }
+            }
+
+            void validate(const DiFactory& diFactory, const AbstractRegistration* root, bool& hasSiprDependency)
+            {
+                if (this == root){
+                    throw new std::logic_error("circular dependency");
+                }
+
+                if (!_validated){
+                    isValid(diFactory, root, _hasSiprDependency);
+                    _validated = true;
+                }
+
+                hasSiprDependency = _hasSiprDependency;
+            }
+
+            void invalidate()
+            {
+                _validated = false;
+                _hasSiprDependency = false;
+            }
 
             template <typename T>
             shared_ptr<T> getTypedInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
@@ -190,10 +222,13 @@ namespace CppDiFactory
 
         protected:
             template <typename T>
-            shared_ptr<AbstractRegistration> findRegistration(const DiFactory& diFactory) const
+            AbstractRegistration& findRegistration(const DiFactory& diFactory) const
             {
                 return diFactory.findRegistration<T>();
             }
+        private:
+            bool _validated;
+            bool _hasSiprDependency;
         };
 
         template <typename Interface, typename Class>
@@ -203,17 +238,15 @@ namespace CppDiFactory
             virtual ~InterfaceRegistration(){}
             virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
             {
-                shared_ptr<AbstractRegistration> concreteClass = findRegistration<Class>(diFactory);
-                if (!concreteClass){
-                    throw new std::logic_error("class for interface was not registered");
-                }
-                return concreteClass->getInstance(diFactory, typeInstanceMap);
+                AbstractRegistration& concreteClass = findRegistration<Class>(diFactory);
+                return concreteClass.getInstance(diFactory, typeInstanceMap);
             }
 
-            virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
+        protected:
+            virtual void isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool& hasSiprDependency) const
             {
-                shared_ptr<AbstractRegistration> concreteClass = findRegistration<Class>(diFactory);
-                return (concreteClass && (this != root) && concreteClass->isValid(diFactory, root ? root : this, isSingleton));
+                AbstractRegistration& concreteClass = findRegistration<Class>(diFactory);
+                concreteClass.validate(diFactory, root, hasSiprDependency);
             }
         };
 
@@ -227,44 +260,43 @@ namespace CppDiFactory
                 return make_shared<Class>(getDependencyInstance<Dependencies>(diFactory, typeInstanceMap)...);
             }
 
-            virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
+        protected:
+            virtual void isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool& hasSiprDependency) const
             {
-                return (this != root) && BoolAnd(isDependencyValid<Dependencies>(diFactory, root ? root : this, isSingleton)...);
+                call(isDependencyValid<Dependencies>(diFactory, root, hasSiprDependency)...);
             }
 
         private:
             template <typename T>
             shared_ptr<T> getDependencyInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
             {
-                shared_ptr<AbstractRegistration> dependency = findRegistration<Class>(diFactory);
-                if (!dependency){
-                    throw new std::logic_error("dependency for class was not registered");
-                }
-                return dependency->getTypedInstance<T>(diFactory, typeInstanceMap);
+                AbstractRegistration& dependency = findRegistration<T>(diFactory);
+                return dependency.getTypedInstance<T>(diFactory, typeInstanceMap);
             }
 
             template <typename T>
-            bool isDependencyValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
+            bool isDependencyValid(const DiFactory& diFactory, const AbstractRegistration* root, bool& hasSiprDependency) const
             {
-                shared_ptr<AbstractRegistration> dependency = findRegistration<T>(diFactory);
-                return dependency->isValid(diFactory, root, isSingleton);
+                AbstractRegistration& dependency = findRegistration<T>(diFactory);
+                dependency.validate(diFactory, root, hasSiprDependency);
+                return true;
             }
 
-            bool BoolAnd() const
+            bool call() const
             {
                 return true;
             }
 
             template <typename T>
-            T BoolAnd(T value) const
+            T call(T value) const
             {
-                return value;
+                return true;
             }
 
             template <typename T, typename... Args>
-            T BoolAnd(T first, Args... args) const
+            T call(T first, Args... args) const
             {
-                return first && BoolAnd(args...);
+                return call(args...);
             }
        };
 
@@ -280,9 +312,10 @@ namespace CppDiFactory
                 return _instance;
             }
 
-            virtual bool isValid(const DiFactory&, const AbstractRegistration*, bool) const
+        protected:
+            virtual void isValid(const DiFactory&, const AbstractRegistration*, bool&) const
             {
-                return true;
+                //empty;
             }
 
         private:
@@ -305,9 +338,13 @@ namespace CppDiFactory
                 return instance;
             }
 
-            virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool) const
+        protected:
+            virtual void isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool& hasSiprDependency) const
             {
-                return ClassRegistration<Class, Dependencies...>::isValid(diFactory, root, true);
+                ClassRegistration<Class, Dependencies...>::isValid(diFactory, root, hasSiprDependency);
+                if (hasSiprDependency){
+                    throw new std::logic_error("Singleton depends on SingleInstancePerRequest class");
+                }
             }
 
         private:
@@ -332,36 +369,44 @@ namespace CppDiFactory
                 }
             }
 
-            virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
+        protected:
+            virtual void isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool& hasSiprDependency) const
             {
-                return (!isSingleton) && ClassRegistration<Class, Dependencies...>::isValid(diFactory, root, isSingleton);
+                ClassRegistration<Class, Dependencies...>::isValid(diFactory, root, hasSiprDependency);
+                hasSiprDependency = true;
             }
         };
 
-        template <typename T>
-        shared_ptr<T> getMyInstance(GenericPtrMap& typeInstanceMap)
-        {
-            shared_ptr<AbstractRegistration> registration = findRegistration<T>();
-            if (registration){
-                return registration->getTypedInstance<T>(*this, typeInstanceMap);
-            } else {
-                throw new std::logic_error("Type was not registered");
-            }
-        }
-
         template<typename T>
-        shared_ptr<AbstractRegistration> findRegistration() const
+        AbstractRegistration& findRegistration() const
         {
             const auto it = _registeredTypes.find(type_id<T>());
             if (it != _registeredTypes.end()){
-                return it->second;
+                return *it->second.get();
             } else {
-                return shared_ptr<AbstractRegistration>();
+                throw new std::logic_error("type not registered");
+            }
+        }
+
+        template <typename T>
+        void addRegistration(shared_ptr<AbstractRegistration> registration)
+        {
+            lock_guard<recursive_mutex> lockGuard{ _mutex };
+
+            auto result = _registeredTypes.insert(RegistrationMap::value_type(type_id<T>(), registration));
+
+            if (!result.second){
+                result.first->second = registration;
+
+                for (auto itr : _registeredTypes){
+                    itr.second->invalidate();
+                }
             }
         }
 
         // Holds the registration object for the registered types
-        unordered_map<size_t, shared_ptr<AbstractRegistration> > _registeredTypes;
+        using RegistrationMap = unordered_map<size_t, shared_ptr<AbstractRegistration> >;
+        RegistrationMap _registeredTypes;
         recursive_mutex _mutex;
 
     };
