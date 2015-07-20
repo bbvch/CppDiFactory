@@ -93,46 +93,61 @@ TEST_CASE( "Registration: Create unknown type", "" ){
 
     CppDiFactory::DiFactory myFactory;
     CHECK_NOTHROW(myFactory.validate());
+    CHECK_THROWS(myFactory.getInstance<Engine>());
 }
 
 TEST_CASE( "De-Registration: Register class", "" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerSingleton<Engine>();
+    myFactory.registerClass<Engine>();
 
     CHECK_NOTHROW(myFactory.validate());
+    CHECK_NOTHROW(myFactory.getInstance<Engine>());
 }
 
 TEST_CASE( "De-Registration: Register class with interface", "" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerSingleton<Engine>().withInterfaces<IEngine>();
+    myFactory.registerClass<Engine>().withInterfaces<IEngine>();
 
     CHECK_NOTHROW(myFactory.validate());
+    CHECK_NOTHROW(myFactory.getInstance<IEngine>());
 }
 
 TEST_CASE( "De-Registration: Unregister class", "" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerSingleton<Engine>().withInterfaces<IEngine>();
+    myFactory.registerClass<Engine>().withInterfaces<IEngine>();
 
     myFactory.unregister<Engine>();
 
     CHECK_THROWS(myFactory.validate());
+    CHECK_THROWS(myFactory.getInstance<IEngine>());
 }
 
 TEST_CASE( "Registration: Unregister interface", "" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerSingleton<Engine>().withInterfaces<IEngine>();
+    myFactory.registerClass<Engine>().withInterfaces<IEngine>();
 
     myFactory.unregister<IEngine>();
 
     CHECK_NOTHROW(myFactory.validate());
+    CHECK_THROWS(myFactory.getInstance<IEngine>());
+}
+
+TEST_CASE( "Registration: Register instance", "" ){
+
+    CppDiFactory::DiFactory myFactory;
+
+     myFactory.registerInstance<Engine>(std::make_shared<Engine>()).withInterfaces<IEngine>();
+
+    CHECK_NOTHROW(myFactory.validate());
+    CHECK_NOTHROW(myFactory.getInstance<IEngine>());
 }
 
 TEST_CASE( "Registration: circular dependencies", "Should not be valid" ){
@@ -144,6 +159,8 @@ TEST_CASE( "Registration: circular dependencies", "Should not be valid" ){
 
 
     CHECK_THROWS(myFactory.validate());
+    CHECK_THROWS(myFactory.getInstance<IVehicle>());
+    CHECK_THROWS(myFactory.getInstance<IMotor>());
 }
 
 TEST_CASE( "Registration: SIPR dependent on singleton", "Should not be valid" ){
@@ -155,6 +172,7 @@ TEST_CASE( "Registration: SIPR dependent on singleton", "Should not be valid" ){
 
 
     CHECK_THROWS(myFactory.validate());
+    CHECK_THROWS(myFactory.getInstance<IScrew>());
 }
 
 TEST_CASE( "Registration: singleton dependent on SIPR", "Should not be valid" ){
@@ -166,6 +184,7 @@ TEST_CASE( "Registration: singleton dependent on SIPR", "Should not be valid" ){
 
 
     CHECK_NOTHROW(myFactory.validate());
+    CHECK_NOTHROW(myFactory.getInstance<IEngine>());
 }
 
 
