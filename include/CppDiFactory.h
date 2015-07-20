@@ -30,9 +30,8 @@ namespace CppDiFactory
     using std::unordered_map;
 
     //TODO:
-    // 1.) Deregistrierung
-    // 2.) Zyklische Abhängigkeit überprüfen und assert werfen
-    // 3.) SIPR in Kombination mit Singleton assert werfen
+    // 1.) Zyklische Abhängigkeit überprüfen und assert werfen
+    // 2.) SIPR in Kombination mit Singleton assert werfen
 
 
     // DiFactory
@@ -163,6 +162,17 @@ namespace CppDiFactory
             };
 
             _typesToCreators[type_id<Interface>()] = instanceGetter;
+        }
+
+        template <typename T>
+        void unregister()
+        {
+            lock_guard<recursive_mutex> lockGuard{ _mutex };
+
+            auto it = _typesToCreators.find(type_id<T>());
+            if (it != _typesToCreators.end()){
+                _typesToCreators.erase(it);
+            }
         }
 
         template <typename T>
