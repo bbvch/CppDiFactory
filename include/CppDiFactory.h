@@ -159,7 +159,7 @@ namespace CppDiFactory
 
             bool result = true;
             for (auto it: _registeredTypes){
-                result = result && it.second->isValid(*this, it.second.get(), false);
+                result = result && it.second->isValid(*this, nullptr, false);
             }
             return result;
         }
@@ -198,7 +198,7 @@ namespace CppDiFactory
             virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
             {
                 shared_ptr<AbstractRegistration> concreteClass = findRegistration<Class>(diFactory);
-                return (concreteClass && (this != root) && concreteClass->isValid(diFactory, root, isSingleton));
+                return (concreteClass && (this != root) && concreteClass->isValid(diFactory, root ? root : this, isSingleton));
             }
         };
 
@@ -214,7 +214,7 @@ namespace CppDiFactory
 
             virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
             {
-                return (this != root) && BoolAnd(isDependencyValid<Dependencies>(diFactory, root, isSingleton)...);
+                return (this != root) && BoolAnd(isDependencyValid<Dependencies>(diFactory, root ? root : this, isSingleton)...);
             }
 
         private:
@@ -229,7 +229,7 @@ namespace CppDiFactory
             bool isDependencyValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
             {
                 shared_ptr<AbstractRegistration> dependency = diFactory.findRegistration<T>(diFactory);
-                return dependency && (this != root) && dependency->isValid(diFactory, root, isSingleton);
+                return dependency->isValid(diFactory, root, isSingleton);
             }
 
             bool BoolAnd() const
