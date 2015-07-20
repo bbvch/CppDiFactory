@@ -12,3 +12,4 @@
 ../../tests/catch.hpp
 ../../tests/testCase1.h
 ../../tests/testCaseSingleton.h
+../../tests/testCaseRegistration.h

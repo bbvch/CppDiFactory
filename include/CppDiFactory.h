@@ -10,11 +10,8 @@
 #ifndef CPP_DI_FACTORY_H
 #define CPP_DI_FACTORY_H
 
-#include <cassert>
-#include <functional>
 #include <memory>
 #include <mutex>
-#include <vector>
 #include <unordered_map>
 
 namespace CppDiFactory
@@ -29,9 +26,7 @@ namespace CppDiFactory
     using std::unordered_map;
 
     //TODO:
-    // 1.) Zyklische Abhängigkeit überprüfen und assert werfen
-    // 2.) SIPR in Kombination mit Singleton assert werfen
-
+    // 1.) Zyklische Abhängigkeit kann noch während der Registrierung überprüft werden
 
     // DiFactory
     // Dependency injection container aka Inversion of Control (IoC) container.
@@ -40,6 +35,16 @@ namespace CppDiFactory
     // http://www.codeproject.com/Articles/567981/AnplusIOCplusContainerplususingplusVariadicplusTem
     // https://github.com/Autodesk/goatnative-inject.git
 
+
+    // Custom type info method that uses size_t and not string for type name -
+    // map lookups should go faster than if we would have used RTTI's typeid<T>().name() which returns a string
+    // as key.
+    // Taken from http://codereview.stackexchange.com/questions/44936/unique-type-id-in-c
+    template<typename T>
+    struct type { static void id() { } };
+
+    template<typename T>
+    size_t type_id() { return reinterpret_cast<size_t>(&type<T>::id); }
 
 
     class DiFactory
@@ -176,6 +181,13 @@ namespace CppDiFactory
             virtual ~AbstractRegistration(){}
             virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap) = 0;
             virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const = 0;
+
+            template <typename T>
+            shared_ptr<T> getTypedInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
+            {
+                return static_pointer_cast<T>(getInstance(diFactory, typeInstanceMap));
+            }
+
         protected:
             template <typename T>
             shared_ptr<AbstractRegistration> findRegistration(const DiFactory& diFactory) const
@@ -192,6 +204,9 @@ namespace CppDiFactory
             virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
             {
                 shared_ptr<AbstractRegistration> concreteClass = findRegistration<Class>(diFactory);
+                if (!concreteClass){
+                    throw new std::logic_error("class for interface was not registered");
+                }
                 return concreteClass->getInstance(diFactory, typeInstanceMap);
             }
 
@@ -221,14 +236,17 @@ namespace CppDiFactory
             template <typename T>
             shared_ptr<T> getDependencyInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
             {
-                shared_ptr<AbstractRegistration> dependency = diFactory.findRegistration<Class>(diFactory);
-                return dependency->getInstance(diFactory, typeInstanceMap);
+                shared_ptr<AbstractRegistration> dependency = findRegistration<Class>(diFactory);
+                if (!dependency){
+                    throw new std::logic_error("dependency for class was not registered");
+                }
+                return dependency->getTypedInstance<T>(diFactory, typeInstanceMap);
             }
 
             template <typename T>
             bool isDependencyValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
             {
-                shared_ptr<AbstractRegistration> dependency = diFactory.findRegistration<T>(diFactory);
+                shared_ptr<AbstractRegistration> dependency = findRegistration<T>(diFactory);
                 return dependency->isValid(diFactory, root, isSingleton);
             }
 
@@ -257,7 +275,7 @@ namespace CppDiFactory
             InstanceRegistration(shared_ptr<Class> instance): _instance(instance) {}
             virtual ~InstanceRegistration(){}
 
-            virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
+            virtual GenericPtr getInstance(const DiFactory&, GenericPtrMap&)
             {
                 return _instance;
             }
@@ -325,10 +343,9 @@ namespace CppDiFactory
         {
             shared_ptr<AbstractRegistration> registration = findRegistration<T>();
             if (registration){
-                return static_pointer_cast<T>(registration->getInstance(*this, typeInstanceMap));
+                return registration->getTypedInstance<T>(*this, typeInstanceMap);
             } else {
-                assert(false && "One of your injected dependencies isn't mapped, please check your mappings.");
-                return shared_ptr<T>();
+                throw new std::logic_error("Type was not registered");
             }
         }
 
@@ -339,24 +356,12 @@ namespace CppDiFactory
             if (it != _registeredTypes.end()){
                 return it->second;
             } else {
-                //TODO check for null values when called
                 return shared_ptr<AbstractRegistration>();
             }
         }
 
-        // Custom type info method that uses size_t and not string for type name -
-        // map lookups should go faster than if we would have used RTTI's typeid<T>().name() which returns a string
-        // as key.
-        // Taken from http://codereview.stackexchange.com/questions/44936/unique-type-id-in-c
-        template<typename T>
-        struct type { static void id() { } };
-
-        template<typename T>
-        size_t type_id() const { return reinterpret_cast<size_t>(&type<T>::id); }
-
-        // Holds the lambda function to create a instance of the registered class
+        // Holds the registration object for the registered types
         unordered_map<size_t, shared_ptr<AbstractRegistration> > _registeredTypes;
-
         recursive_mutex _mutex;
 
     };
