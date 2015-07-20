@@ -152,6 +152,18 @@ namespace CppDiFactory
             return getMyInstance<T>(typeInstanceMap);
         }
 
+
+        bool isValid()
+        {
+            lock_guard<recursive_mutex> lockGuard{ _mutex };
+
+            bool result = true;
+            for (auto it: _registeredTypes){
+                result = result && it.second->isValid(*this, it.second.get(), false);
+            }
+            return result;
+        }
+
     private:
         friend class AbstractRegistration;
 
@@ -163,7 +175,7 @@ namespace CppDiFactory
         public:
             virtual ~AbstractRegistration(){}
             virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap) = 0;
-            virtual bool isValid(const DiFactory& diFactory, bool isSingleton) const = 0;
+            virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const = 0;
         protected:
             template <typename T>
             shared_ptr<AbstractRegistration> findRegistration(const DiFactory& diFactory) const
@@ -183,10 +195,10 @@ namespace CppDiFactory
                 return concreteClass->getInstance(diFactory, typeInstanceMap);
             }
 
-            virtual bool isValid(const DiFactory& diFactory, bool isSingleton) const
+            virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
             {
                 shared_ptr<AbstractRegistration> concreteClass = findRegistration<Class>(diFactory);
-                return concreteClass->isValid(diFactory, isSingleton);
+                return (concreteClass && (this != root) && concreteClass->isValid(diFactory, root, isSingleton));
             }
         };
 
@@ -200,24 +212,24 @@ namespace CppDiFactory
                 return make_shared<Class>(getDependencyInstance<Dependencies>(diFactory, typeInstanceMap)...);
             }
 
-            virtual bool isValid(const DiFactory& diFactory, bool isSingleton) const
+            virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
             {
-                return BoolAnd(isDependencyValid<Dependencies>(diFactory, isSingleton)...);
+                return (this != root) && BoolAnd(isDependencyValid<Dependencies>(diFactory, root, isSingleton)...);
             }
 
         private:
             template <typename T>
             shared_ptr<T> getDependencyInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
             {
-                shared_ptr<AbstractRegistration> concreteClass = diFactory.findRegistration<Class>(diFactory);
-                return concreteClass->getInstance(diFactory, typeInstanceMap);
+                shared_ptr<AbstractRegistration> dependency = diFactory.findRegistration<Class>(diFactory);
+                return dependency->getInstance(diFactory, typeInstanceMap);
             }
 
             template <typename T>
-            bool isDependencyValid(const DiFactory& diFactory, bool isSingleton) const
+            bool isDependencyValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
             {
-                shared_ptr<AbstractRegistration> concreteClass = diFactory.findRegistration<T>(diFactory);
-                return concreteClass->isValid(diFactory, isSingleton);
+                shared_ptr<AbstractRegistration> dependency = diFactory.findRegistration<T>(diFactory);
+                return dependency && (this != root) && dependency->isValid(diFactory, root, isSingleton);
             }
 
             bool BoolAnd() const
@@ -250,7 +262,7 @@ namespace CppDiFactory
                 return _instance;
             }
 
-            virtual bool isValid(const DiFactory& diFactory, bool isSingleton) const
+            virtual bool isValid(const DiFactory&, const AbstractRegistration*, bool) const
             {
                 return true;
             }
@@ -275,9 +287,9 @@ namespace CppDiFactory
                 return instance;
             }
 
-            virtual bool isValid(const DiFactory& diFactory, bool) const
+            virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool) const
             {
-                return ClassRegistration<Class, Dependencies...>::isValid(diFactory, true);
+                return ClassRegistration<Class, Dependencies...>::isValid(diFactory, root, true);
             }
 
         private:
@@ -302,9 +314,9 @@ namespace CppDiFactory
                 }
             }
 
-            virtual bool isValid(const DiFactory& diFactory, bool isSingleton) const
+            virtual bool isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool isSingleton) const
             {
-                return (!isSingleton) && ClassRegistration<Class, Dependencies...>::isValid(diFactory, isSingleton);
+                return (!isSingleton) && ClassRegistration<Class, Dependencies...>::isValid(diFactory, root, isSingleton);
             }
         };
 
