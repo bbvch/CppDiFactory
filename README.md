@@ -22,7 +22,9 @@ case of an error (missing type, cyclic dependency, ...), an exception is thrown.
 To avoid a bigger performance impact, this validation is only done once for each type.
 
 Idea based upon:
+
 http://www.codeproject.com/Articles/567981/AnplusIOCplusContainerplususingplusVariadicplusTem
+
 https://github.com/Autodesk/goatnative-inject.git
 
 ##usage
