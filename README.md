@@ -90,6 +90,7 @@ https://github.com/Autodesk/goatnative-inject.git
 	diFactory.registerSingleton<ClassB, IntfA1>().withInterfaces<MyIntfB>;
 	diFactory.registerInstance<ClassC>(make_shared<ClassC>(5)).withInterfaces<IntfB>;
 	diFactory.registerInstancePerRequest<ClassD, IntfA2>().withInterfaces<IntfD>;
+	diFactory.registerInstanceProvidedAtRequest<ClassD, IntfA2>().withInterfaces<IntfD>;
 	diFactory.registerClass<ClassE, IntfD, IntfB, IntfC>().withInterfaces<IntfE>;
 	diFactory.registerClass<ClassF, IntfE, IntfB, IntfC>().withInterfaces<IntfF>;
 ```
