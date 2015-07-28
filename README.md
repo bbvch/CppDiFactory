@@ -12,6 +12,7 @@ There are four different ways the factory can handle classes:
 | Regular Class               | registerClass              | Create a new instance each time an instance is required. |
 | Singleton Class             | registerInstance           | Always use a predefined instance. |
 | Singleton Class on demand   | registerSingleton          | Create an instance the first time it is used and return that instance for each request. Once the instance is not needed anymore (by any user), destroy it again.|
+| Instance Provided At Request| registerInstanceProvidedAtRequest | CRegister a new class as "Instance Provided At Request". Instances of such classes are never created by the DI-Factory itself. They always need to be provided at runtime when retrieving an instance. |
 | Single Instance Per Request | registerInstancePerRequest | Similar to regular Class, but when this class is used as a dependency, the same instance will be used for all dependencies of the current request.|
 
 When an instance of an interface is requested, an instance of the class which implements that
