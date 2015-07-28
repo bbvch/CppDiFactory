@@ -6,19 +6,18 @@
 namespace testCaseRegistration
 {
 
-class IEngine
-{
-public:
-    virtual double getVolume() const = 0;
-    virtual ~IEngine() = default;
-};
-
 class IScrew
 {
 public:
     virtual bool tight() const = 0;
     virtual ~IScrew() = default;
-    virtual std::shared_ptr<IEngine> engine() const = 0;
+};
+
+class IEngine
+{
+public:
+    virtual double getVolume() const = 0;
+    virtual ~IEngine() = default;
 };
 
 class IMotor
@@ -35,12 +34,12 @@ public:
     virtual ~IVehicle() = default;
 };
 
-class Engine : public IEngine
+class Screw : public IScrew
 {
 public:
-    virtual double getVolume() const override
+    virtual bool tight() const override
     {
-        return 10.5;
+        return true;
     }
 };
 
@@ -76,83 +75,79 @@ private:
     std::shared_ptr<IVehicle> _vehicle;
 };
 
-class Screw : public IScrew
+class Engine : public IEngine
 {
 public:
-    Screw(std::shared_ptr<IEngine> engine):
+    Engine(std::shared_ptr<IScrew> engine):
         _engine(engine)
     {}
-    virtual bool tight() const override
+    virtual double getVolume() const override
     {
-        return true;
-    }
-    virtual std::shared_ptr<IEngine> engine() const override
-    {
-        return _engine;
+        return 10.5;
     }
 private:
-    std::shared_ptr<IEngine> _engine;
+    std::shared_ptr<IScrew> _engine;
 };
 
 TEST_CASE( "Registration: Create unknown type", "" ){
 
     CppDiFactory::DiFactory myFactory;
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_THROWS(myFactory.getInstance<Engine>());
+    CHECK_THROWS(myFactory.getInstance<Screw>());
 }
 
 TEST_CASE( "De-Registration: Register class", "" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerClass<Engine>();
+    myFactory.registerClass<Screw>();
 
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_NOTHROW(myFactory.getInstance<Engine>());
+    CHECK_NOTHROW(myFactory.getInstance<Screw>());
 }
 
 TEST_CASE( "De-Registration: Register class with interface", "" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerClass<Engine>().withInterfaces<IEngine>();
+    myFactory.registerClass<Screw>().withInterfaces<IScrew>();
 
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_NOTHROW(myFactory.getInstance<IEngine>());
+    CHECK_NOTHROW(myFactory.getInstance<IScrew>());
 }
 
 TEST_CASE( "De-Registration: Unregister class", "" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerClass<Engine>().withInterfaces<IEngine>();
+    myFactory.registerClass<Screw>().withInterfaces<IScrew>();
 
-    myFactory.unregister<Engine>();
+    myFactory.unregister<Screw>();
 
     CHECK_THROWS(myFactory.validate());
-    CHECK_THROWS(myFactory.getInstance<IEngine>());
+    CHECK_THROWS(myFactory.getInstance<IScrew>());
 }
 
 TEST_CASE( "Registration: Unregister interface", "" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerClass<Engine>().withInterfaces<IEngine>();
+    myFactory.registerClass<Screw>().withInterfaces<IScrew>();
 
-    myFactory.unregister<IEngine>();
+    myFactory.unregister<IScrew>();
 
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_THROWS(myFactory.getInstance<IEngine>());
+    CHECK_THROWS(myFactory.getInstance<IScrew>());
 }
 
 TEST_CASE( "Registration: Register instance", "" ){
 
     CppDiFactory::DiFactory myFactory;
 
-     myFactory.registerInstance<Engine>(std::make_shared<Engine>()).withInterfaces<IEngine>();
+     myFactory.registerInstance<Screw>(std::make_shared<Screw>()).withInterfaces<IScrew>();
 
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_NOTHROW(myFactory.getInstance<IEngine>());
+    CHECK_NOTHROW(myFactory.getInstance<IScrew>());
 }
 
 TEST_CASE( "Registration: circular dependencies", "Should not be valid" ){
@@ -172,81 +167,81 @@ TEST_CASE( "Registration: SIPR dependent on singleton", "Should not be valid" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerSingleton<Screw, IEngine>().withInterfaces<IScrew>();
-    myFactory.registerInstancePerRequest<Engine>().withInterfaces<IEngine>();
+    myFactory.registerSingleton<Engine, IScrew>().withInterfaces<IEngine>();
+    myFactory.registerInstancePerRequest<Screw>().withInterfaces<IScrew>();
 
 
     CHECK_THROWS(myFactory.validate());
-    CHECK_THROWS(myFactory.getInstance<IScrew>());
+    CHECK_THROWS(myFactory.getInstance<IEngine>());
 }
 
 TEST_CASE( "Registration: singleton dependent on SIPR", "Should not be valid" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerInstancePerRequest<Screw, IEngine>().withInterfaces<IScrew>();
-    myFactory.registerSingleton<Engine>().withInterfaces<IEngine>();
+    myFactory.registerInstancePerRequest<Engine, IScrew>().withInterfaces<IEngine>();
+    myFactory.registerSingleton<Screw>().withInterfaces<IScrew>();
 
 
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_NOTHROW(myFactory.getInstance<IEngine>());
+    CHECK_NOTHROW(myFactory.getInstance<IScrew>());
 }
 
 TEST_CASE( "Registration: instance provided at request with param", "Should be valid" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerClass<Screw, IEngine>().withInterfaces<IScrew>();
-    myFactory.registerInstanceProvidedAtRequest<Engine>().withInterfaces<IEngine>();
+    myFactory.registerClass<Engine, IScrew>().withInterfaces<IEngine>();
+    myFactory.registerInstanceProvidedAtRequest<Screw>().withInterfaces<IScrew>();
 
 
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_NOTHROW((myFactory.getInstance<IScrew, Engine>(std::make_shared<Engine>())));
+    CHECK_NOTHROW((myFactory.getInstance<IEngine, Screw>(std::make_shared<Screw>())));
 }
 
 TEST_CASE( "Registration: instance provided at request without param", "Should fail" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerClass<Screw, IEngine>().withInterfaces<IScrew>();
-    myFactory.registerInstanceProvidedAtRequest<Engine>().withInterfaces<IEngine>();
+    myFactory.registerClass<Engine, IScrew>().withInterfaces<IEngine>();
+    myFactory.registerInstanceProvidedAtRequest<Screw>().withInterfaces<IScrew>();
 
 
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_THROWS(myFactory.getInstance<IScrew>());
+    CHECK_THROWS(myFactory.getInstance<IEngine>());
 }
 
 TEST_CASE( "Registration: single instance per request with param", "Should be valid" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerClass<Screw, IEngine>().withInterfaces<IScrew>();
-    myFactory.registerInstancePerRequest<Engine>().withInterfaces<IEngine>();
+    myFactory.registerClass<Engine, IScrew>().withInterfaces<IEngine>();
+    myFactory.registerInstancePerRequest<Screw>().withInterfaces<IScrew>();
 
 
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_NOTHROW((myFactory.getInstance<IScrew, Engine>(std::make_shared<Engine>())));
+    CHECK_NOTHROW((myFactory.getInstance<IEngine, Screw>(std::make_shared<Screw>())));
 }
 
 TEST_CASE( "Registration: register instance with param", "Should not be valid" ){
 
     CppDiFactory::DiFactory myFactory;
 
-    myFactory.registerClass<Screw, IEngine>().withInterfaces<IScrew>();
-    myFactory.registerInterface<Engine, IEngine>();
+    myFactory.registerClass<Engine, IScrew>().withInterfaces<IEngine>();
+    myFactory.registerInterface<Screw, IScrew>();
 
-    std::shared_ptr<Engine> engine1 = std::make_shared<Engine>();
-    std::shared_ptr<Engine> engine2 = std::make_shared<Engine>();
-    std::shared_ptr<Engine> engine3 = std::make_shared<Engine>();
+    std::shared_ptr<Screw> engine1 = std::make_shared<Screw>();
+    std::shared_ptr<Screw> engine2 = std::make_shared<Screw>();
+    std::shared_ptr<Screw> engine3 = std::make_shared<Screw>();
 
-    myFactory.registerInstance<Engine>(engine1);
+    myFactory.registerInstance<Screw>(engine1);
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_NOTHROW((myFactory.getInstance<IScrew>()));
-    myFactory.registerInstance<Engine>(engine2);
+    CHECK_NOTHROW((myFactory.getInstance<IEngine>()));
+    myFactory.registerInstance<Screw>(engine2);
     CHECK_NOTHROW(myFactory.validate());
-    CHECK_NOTHROW((myFactory.getInstance<IScrew>()));
+    CHECK_NOTHROW((myFactory.getInstance<IEngine>()));
 
-    CHECK_THROWS((myFactory.getInstance<IScrew, Engine>(engine3)));
+    CHECK_THROWS((myFactory.getInstance<IEngine, Screw>(engine3)));
 }
 
 
