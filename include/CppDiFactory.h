@@ -54,12 +54,16 @@ namespace CppDiFactory
     /// The DiFactory allows to register different classes and the interfaces they implement.
     /// There are four different ways the factory can handle classes:
     ///   - Regular Class: Create a new instance each time an instance is required (use registerClass)
-    ///   - Singleton Class: Always use a predefined instance (use registerInstance)
+    ///   - Singleton Instance: Always use a predefined instance (use registerInstance)
     ///   - Singleton Class on demand: Create an instance the first time it is used and return that instance
     ///     for each request. Once the instance is not needed anymore (by any user), destroy it again.
     ///     (use registerSingleton)
-    ///   - Single Instance Per Request: Similar to regular Class, but when this class is used as a dependency,
-    ///     the same instance will be used for all dependencies of the current request.
+    ///   - Instance Provided At Request: Always use the same instance whenever the specific type is
+    ///     requested.
+    ///     The actual instance needs to be provided as parameter at requests. If no instance is
+    ///     provided, an exception will be thrown.
+    ///   - Single Instance Per Request: Similar to Instance Provided At Request, but when no instance
+    ///     is provided, a default instance will be created and used whenever needed for this request.
     /// When an instance of an interface is requested, an instance of the class which implements that
     /// interface is returned (this depends on the type of registration of the class).
     ///
@@ -242,6 +246,33 @@ namespace CppDiFactory
         }
 
 
+        /// Register a new class as "Instance Provided At Request".
+        /// Instances of such classes are never created by the
+        /// DI-Factory itself. They always need to be provided at
+        /// runtime when retrieving an instance.
+        /// The same instance will be used whenever such a class is
+        /// needed within a request.
+        /// A typical use case is a "configuration" class.
+        ///
+        /// Please note: The validation cannot catch cases where
+        /// registerInstanceProvidedAtRequest is used but no
+        /// instance is supplied at the actual request.
+        /// This means that you either have to provide an instance for
+        /// EVERY type registered with registerInstanceProvidedAtRequest
+        /// or that you need to know the actual dependencies of the type
+        /// that you request.
+        /// \tparam Class  Type of class which should be registered
+        template <typename Class>
+        InterfaceForType<Class> registerInstanceProvidedAtRequest()
+        {
+            lock_guard<recursive_mutex> lockGuard{ _mutex };
+
+            addRegistration<Class>(make_shared<InstanceProvidedAtRequestRegistration<Class> >());
+
+            return InterfaceForType<Class>(*this);
+        }
+
+
         /// Register a new singleton class and its dependencies.
         /// Getting an instance of this type for the first time
         /// will internally create a new instance on the heap and
@@ -300,7 +331,6 @@ namespace CppDiFactory
             }
         }
 
-
         /// Get an instance of the specified type.
         /// According to the registration of this type an existing
         /// singleton or a new instance will be returned.
@@ -309,13 +339,21 @@ namespace CppDiFactory
         /// check will only be done once for each object). If an error
         /// is detected (missing type, cyclic dependency, ...) an
         /// exception will be thrown.
-        template <typename T>
-        shared_ptr<T> getInstance()
+        /// @tparam T         Type which should be return
+        /// @tparam Instances Type of instance parameters supplied
+        /// @param instances Instance parameters which will be used
+        ///                  for the according InstanceProvidedAtRequest and
+        ///                  SingleInstancePerRequest types.
+        template <typename T, typename... Instances>
+        shared_ptr<T> getInstance(const std::shared_ptr<Instances>&... instances)
         {
             lock_guard<recursive_mutex> lockGuard{ _mutex };
             AbstractRegistration& registration = findRegistration<T>();
             registration.validate(*this);
             GenericPtrMap typeInstanceMap;
+
+            RegisterInstanceForRequest(typeInstanceMap, instances...);
+
             return registration.getTypedInstance<T>(*this, typeInstanceMap);
         }
 
@@ -353,6 +391,10 @@ namespace CppDiFactory
         public:
             virtual ~AbstractRegistration(){}
             virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap) = 0;
+            virtual void checkAsParam()
+            {
+                throw new std::logic_error("Not allowed as parameter");
+            }
 
             void validate(const DiFactory& diFactory)
             {
@@ -544,11 +586,45 @@ namespace CppDiFactory
                 }
             }
 
+            virtual void checkAsParam()
+            {
+                // allowed --> no exception thrown
+            }
+
         protected:
             virtual void isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool& hasSiprDependency) const
             {
                 ClassRegistration<Class, Dependencies...>::isValid(diFactory, root, hasSiprDependency);
                 hasSiprDependency = true;
+            }
+        };
+
+        /// registration for single instance per request classes
+        template <typename Class>
+        class InstanceProvidedAtRequestRegistration: public AbstractRegistration
+        {
+        public:
+            virtual ~InstanceProvidedAtRequestRegistration(){}
+
+            virtual GenericPtr getInstance(const DiFactory& diFactory, GenericPtrMap& typeInstanceMap)
+            {
+                auto it = typeInstanceMap.find(type_id<Class>());
+                if (it != typeInstanceMap.end()){
+                    return it->second;
+                } else {
+                    throw new std::logic_error("Instance must be supplied at request");
+                }
+            }
+
+            virtual void checkAsParam()
+            {
+                // allowed --> no exception thrown
+            }
+
+        protected:
+            virtual void isValid(const DiFactory& diFactory, const AbstractRegistration* root, bool& hasSiprDependency) const
+            {
+                // validation is done at design time
             }
         };
 
@@ -577,6 +653,26 @@ namespace CppDiFactory
                     itr.second->invalidate();
                 }
             }
+        }
+
+        template <typename Instance, typename... Instances>
+        void RegisterInstanceForRequest(GenericPtrMap& instanceMap, const std::shared_ptr<Instance>& instance, const std::shared_ptr<Instances>&... instances)
+        {
+            this->RegisterInstanceForRequest<Instances...>(instanceMap, instance);
+            this->RegisterInstanceForRequest<Instances...>(instanceMap, instances...);
+        }
+
+        template <typename Instance>
+        void RegisterInstanceForRequest(GenericPtrMap& instanceMap, const std::shared_ptr<Instance>& instance)
+        {
+            AbstractRegistration& registration = findRegistration<Instance>();
+            registration.checkAsParam();
+            instanceMap[type_id<Instance>()] = instance;
+        }
+
+        void RegisterInstanceForRequest(GenericPtrMap& instanceMap)
+        {
+            //empty
         }
 
         /// Holds the registration object for the registered types
