@@ -8,9 +8,7 @@ env:
     BUILD_DIR=build
 
 script:
-  - if test ${CC} = gcc ; then make BUILD_DIR=${BUILD_DIR} CC=g++ test ; fi
-  - if test ${CC} = clang ; then make BUILD_DIR=${BUILD_DIR} CC=clang++ test ; fi
+  - make BUILD_DIR=${BUILD_DIR} tests
   - (cd ${BUILD_DIR}/tests/ && ./MainTest)  
-  - if test ${CC} = gcc ; then make BUILD_DIR=${BUILD_DIR} CC=g++ examples ; fi
-  - if test ${CC} = clang ; then make BUILD_DIR=${BUILD_DIR} CC=clang++ examples ; fi
+  - make BUILD_DIR=${BUILD_DIR} examples
 
