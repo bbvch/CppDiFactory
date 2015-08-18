@@ -5,7 +5,17 @@ compiler:
 
 env:
   global:
-    BUILD_DIR=build
+    - BUILD_DIR=build
+    - GCC_VERSION=4.8
+
+before_install:
+  - if test ${CC} = gcc ; then sudo apt-add-repository -y ppa:ubuntu-toolchain-r/test ; fi
+  - sudo apt-get -qq update
+
+install:
+  - if test ${CC} = gcc ; then sudo apt-get -y -qq install g++-${GCC_VERSION} ; fi
+  - if test ${CC} = gcc ; then sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-${GCC_VERSION} 40 --slave /usr/bin/g++ g++ /usr/bin/g++-${GCC_VERSION} --slave /usr/bin/gcov gcov /usr/bin/gcov-${GCC_VERSION} ; fi
+  - if test ${CC} = gcc ; then sudo update-alternatives --set gcc /usr/bin/gcc-${GCC_VERSION} ; fi
 
 script:
   - make BUILD_DIR=${BUILD_DIR} tests
