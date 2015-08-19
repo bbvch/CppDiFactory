@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/meshell/CppDiFactory.svg?branch=travis)](https://travis-ci.org/meshell/CppDiFactory)
+[![Build Status](https://travis-ci.org/bbvch/CppDiFactory.svg)](https://travis-ci.org/bbvch/CppDiFactory)
 
 # CppDiFactory
 
