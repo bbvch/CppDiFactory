@@ -1,24 +1,23 @@
-BUILD_DIR=../BuildDir/tests
+TEST_BUILD_DIR=../${BUILD_DIR}/tests
 
-CC = g++
 INC = ../include
 CXXFLAGS  = -g -Wall -std=c++11 -I$(INC)
 
 DEPENDENCIES = testCase1.h
 
 .cpp.o:
-	$(CC) $(CFLAGS) $(INC) $< -o $@
+	$(CXX) $(CXXFLAGS) $(INC) $< -o $@
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+$(TEST_BUILD_DIR):
+	mkdir -p $(TEST_BUILD_DIR)
 
-MainTest: $(BUILD_DIR)/MainTest.o
-	$(CC) -o $(BUILD_DIR)/MainTest $(BUILD_DIR)/MainTest.o
+MainTest: $(TEST_BUILD_DIR)/MainTest.o
+	$(CXX) -o $(TEST_BUILD_DIR)/MainTest $(TEST_BUILD_DIR)/MainTest.o
 
-$(BUILD_DIR)/MainTest.o: MainTest.cpp $(INC)/CppDiFactory.h $(DEPENDENCIES) $(BUILD_DIR)
-	$(CC) $(CXXFLAGS) -I$(INC) -c MainTest.cpp -o$(BUILD_DIR)/MainTest.o
+$(TEST_BUILD_DIR)/MainTest.o: MainTest.cpp $(INC)/CppDiFactory.h $(DEPENDENCIES) $(TEST_BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -I$(INC) -c MainTest.cpp -o$(TEST_BUILD_DIR)/MainTest.o
 
 all: MainTest
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(TEST_BUILD_DIR)

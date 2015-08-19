@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/meshell/CppDiFactory.svg?branch=travis)](https://travis-ci.org/meshell/CppDiFactory)
+
 # CppDiFactory
 
 A simple C++11 single header dependency injection container

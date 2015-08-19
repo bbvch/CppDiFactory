@@ -1,17 +1,16 @@
 BUILD_DIR=BuildDir
 DI_CONTAINER_TEST=$(BUILD_DIR)/
 
-CC=g++
-CFLAGS=-c -Wall -O0 -g3 -std=c++11
+CXXFLAGS=-c -Wall -O0 -g3 -std=c++11
 INC=-Iinclude
 
-.PHONY: exampes tests clean run
+.PHONY: examples tests clean run
 
 run: $(SAMPLE)
 	./$(SAMPLE)
 
 .cpp.o:
-	$(CC) $(CFLAGS) $(INC) $< -o $@
+	$(CXX) $(CFLAGS) $(INC) $< -o $@
 
 tests:
 	(cd tests; ${MAKE} all);
