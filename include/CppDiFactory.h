@@ -25,7 +25,7 @@ namespace CppDiFactory
 {
     using std::lock_guard;
     using std::make_shared;
-    using std::recursive_mutex;
+    using std::mutex;
     using std::shared_ptr;
     using std::size_t;
     using std::static_pointer_cast;
@@ -206,7 +206,7 @@ namespace CppDiFactory
         template <typename Class, typename... Dependencies>
         InterfaceForType<Class> registerClass()
         {
-            lock_guard<recursive_mutex> lockGuard{ _mutex };
+            lock_guard<mutex> lockGuard{ _mutex };
 
              addRegistration<Class>(make_shared<ClassRegistration<Class, Dependencies...> >());
             
@@ -217,7 +217,7 @@ namespace CppDiFactory
         template <typename Class>
         InterfaceForType<Class> registerInstance(shared_ptr<Class> instance)
         {
-            lock_guard<recursive_mutex> lockGuard{ _mutex };
+            lock_guard<mutex> lockGuard{ _mutex };
 
             addRegistration<Class>(make_shared<InstanceRegistration<Class> >(instance));
 
@@ -238,7 +238,7 @@ namespace CppDiFactory
         template <typename Class, typename... Dependencies>
         InterfaceForType<Class> registerInstancePerRequest()
         {
-            lock_guard<recursive_mutex> lockGuard{ _mutex };
+            lock_guard<mutex> lockGuard{ _mutex };
 
             addRegistration<Class>(make_shared<SingleInstancePerRequestRegistration<Class, Dependencies...> >());
 
@@ -265,7 +265,7 @@ namespace CppDiFactory
         template <typename Class>
         InterfaceForType<Class> registerInstanceProvidedAtRequest()
         {
-            lock_guard<recursive_mutex> lockGuard{ _mutex };
+            lock_guard<mutex> lockGuard{ _mutex };
 
             addRegistration<Class>(make_shared<InstanceProvidedAtRequestRegistration<Class> >());
 
@@ -290,7 +290,7 @@ namespace CppDiFactory
         template <typename Class, typename... Dependencies>
         InterfaceForType<Class> registerSingleton()
         {
-            lock_guard<recursive_mutex> lockGuard{ _mutex };
+            lock_guard<mutex> lockGuard{ _mutex };
 
             addRegistration<Class>(make_shared<SingletonRegistration<Class, Dependencies...> >());
 
@@ -309,7 +309,7 @@ namespace CppDiFactory
         template <typename Class, typename Interface>
         void registerInterface()
         {
-            lock_guard<recursive_mutex> lockGuard{ _mutex };
+            lock_guard<mutex> lockGuard{ _mutex };
 
             addRegistration<Interface>(make_shared<InterfaceRegistration<Interface, Class> >());
         }
@@ -319,7 +319,7 @@ namespace CppDiFactory
         template <typename T>
         void unregister()
         {
-            lock_guard<recursive_mutex> lockGuard{ _mutex };
+            lock_guard<mutex> lockGuard{ _mutex };
 
             auto it = _registeredTypes.find(type_id<T>());
             if (it != _registeredTypes.end()){
@@ -347,7 +347,7 @@ namespace CppDiFactory
         template <typename T, typename... Instances>
         shared_ptr<T> getInstance(const std::shared_ptr<Instances>&... instances)
         {
-            lock_guard<recursive_mutex> lockGuard{ _mutex };
+            lock_guard<mutex> lockGuard{ _mutex };
             AbstractRegistration& registration = findRegistration<T>();
             registration.validate(*this);
             GenericPtrMap typeInstanceMap;
@@ -367,7 +367,7 @@ namespace CppDiFactory
         /// If an error is detected, an exception will be thrown.
         void validate()
         {
-            lock_guard<recursive_mutex> lockGuard{ _mutex };
+            lock_guard<mutex> lockGuard{ _mutex };
 
             for (auto it: _registeredTypes){
                 it.second->validate(*this);
@@ -642,8 +642,6 @@ namespace CppDiFactory
         template <typename T>
         void addRegistration(shared_ptr<AbstractRegistration> registration)
         {
-            lock_guard<recursive_mutex> lockGuard{ _mutex };
-
             auto result = _registeredTypes.insert(std::make_pair(type_id<T>(), registration));
 
             if (!result.second){
@@ -677,7 +675,7 @@ namespace CppDiFactory
 
         /// Holds the registration object for the registered types
         unordered_map<size_t, shared_ptr<AbstractRegistration> > _registeredTypes;
-        recursive_mutex _mutex;
+        mutex _mutex;
 
     };
 } // namespace CppDiFactory
