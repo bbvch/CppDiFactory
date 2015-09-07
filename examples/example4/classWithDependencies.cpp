@@ -114,7 +114,7 @@ private:
 
 
 int main(int argc, const char * argv[]) {
-	DiFactory injector;
+    DiFactory injector;
 
     // Here's an example of a more complex graph of objects tied together
     // using Injector -

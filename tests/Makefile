@@ -1,3 +1,5 @@
+BUILD_DIR ?= BuildDir
+
 TEST_BUILD_DIR=../${BUILD_DIR}/tests
 
 INC = ../include

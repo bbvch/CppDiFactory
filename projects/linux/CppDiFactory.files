@@ -13,3 +13,5 @@
 ../../tests/testCase1.h
 ../../tests/testCaseSingleton.h
 ../../tests/testCaseRegistration.h
+../../README.md
+../../include/FakeMutex.h
